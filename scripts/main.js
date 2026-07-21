@@ -1,11 +1,10 @@
 const MODULE_ID = "uuid-copier";
-const MODULE_TITLE = "Evilbram UUID Copier";
+const MODULE_TITLE = "Evilbram UIID-Copier";
 const LOG_PREFIX = `[${MODULE_TITLE}]`;
 const CONTEXT_MENU_CLASS = `${MODULE_ID}-copy-uuid`;
 
 /**
- * Types de Documents pris en charge par la V1.
- * Chaque nom correspond au nom canonique d'un Document Foundry.
+ * Types de Documents de monde pris en charge.
  */
 const SUPPORTED_DOCUMENT_NAMES = Object.freeze([
   "Actor",
@@ -16,6 +15,15 @@ const SUPPORTED_DOCUMENT_NAMES = Object.freeze([
   "Macro",
   "Playlist",
   "Cards"
+]);
+
+/**
+ * Documents intégrés à une scène pris en charge.
+ */
+const SUPPORTED_PLACEABLE_DOCUMENT_NAMES = Object.freeze([
+  "Wall",
+  "AmbientLight",
+  "Region"
 ]);
 
 /**
@@ -43,10 +51,35 @@ function warn(message, error) {
 }
 
 /**
- * Récupère les identifiants portés par l'entrée HTML ciblée.
+ * Renvoie la première valeur dataset exploitable trouvée sur l'élément
+ * ou sur l'un de ses parents.
  *
- * Foundry v14 utilise normalement data-entry-id dans ses répertoires.
- * Les autres clés servent uniquement de replis défensifs.
+ * @param {HTMLElement} target
+ * @param {string[]} keys
+ * @returns {string|null}
+ */
+function findDatasetValue(target, keys) {
+  if (!target || typeof target.closest !== "function") return null;
+
+  let element = target;
+
+  while (element instanceof HTMLElement) {
+    for (const key of keys) {
+      const value = element.dataset?.[key];
+
+      if (typeof value === "string" && value.length > 0) {
+        return value;
+      }
+    }
+
+    element = element.parentElement;
+  }
+
+  return null;
+}
+
+/**
+ * Récupère les identifiants portés par une entrée HTML standard.
  *
  * @param {HTMLElement} target
  * @returns {{id: string|null, uuid: string|null}}
@@ -60,8 +93,63 @@ function getTargetIdentifiers(target) {
   }
 
   const entry =
+    target.closest(
+      "[data-sound-id], " +
+      "[data-entry-id], " +
+      "[data-document-id], " +
+      "[data-object-id], " +
+      "[data-uuid], " +
+      "[data-id]"
+    ) ?? target;
+
+  const dataset = entry?.dataset ?? {};
+
+  const id =
+    dataset.soundId ??
+    dataset.entryId ??
+    dataset.documentId ??
+    dataset.objectId ??
+    dataset.id ??
+    null;
+
+  const uuid = dataset.uuid ?? null;
+
+  return {
+    id:
+      typeof id === "string" && id.length > 0
+        ? id
+        : null,
+
+    uuid:
+      isUsableUuid(uuid)
+        ? uuid
+        : null
+  };
+}
+
+/**
+ * Récupère spécifiquement l'identifiant d'une page dans la barre
+ * latérale d'un JournalEntry ouvert.
+ *
+ * Cette fonction reste séparée de getTargetIdentifiers afin de ne pas
+ * modifier le comportement déjà validé pour les autres menus.
+ *
+ * @param {HTMLElement} target
+ * @returns {{id: string|null, uuid: string|null}}
+ */
+function getJournalPageIdentifiers(target) {
+  if (!target || typeof target.closest !== "function") {
+    return {
+      id: null,
+      uuid: null
+    };
+  }
+
+  const entry =
+    target.closest("[data-page-id]") ??
     target.closest("[data-entry-id]") ??
     target.closest("[data-document-id]") ??
+    target.closest("[data-object-id]") ??
     target.closest("[data-uuid]") ??
     target.closest("[data-id]") ??
     target;
@@ -69,25 +157,64 @@ function getTargetIdentifiers(target) {
   const dataset = entry?.dataset ?? {};
 
   const id =
+    dataset.pageId ??
     dataset.entryId ??
     dataset.documentId ??
+    dataset.objectId ??
     dataset.id ??
     null;
 
   const uuid = dataset.uuid ?? null;
 
   return {
-    id: typeof id === "string" && id.length > 0 ? id : null,
-    uuid: isUsableUuid(uuid) ? uuid : null
+    id:
+      typeof id === "string" && id.length > 0
+        ? id
+        : null,
+
+    uuid:
+      isUsableUuid(uuid)
+        ? uuid
+        : null
   };
 }
 
 /**
- * Résout l'UUID de l'entrée sur laquelle le clic droit a été effectué.
+ * Produit plusieurs formes possibles d'un identifiant HTML.
  *
- * Fonctionne avec :
- * - une collection de monde ;
- * - un compendium ouvert.
+ * @param {string|null} id
+ * @param {string} [documentName]
+ * @returns {string[]}
+ */
+function getCandidateIds(id, documentName) {
+  if (typeof id !== "string" || id.length === 0) {
+    return [];
+  }
+
+  const candidates = new Set([id]);
+
+  if (
+    documentName &&
+    id.startsWith(`${documentName}.`)
+  ) {
+    candidates.add(
+      id.slice(documentName.length + 1)
+    );
+  }
+
+  if (id.includes(".")) {
+    candidates.add(
+      id.split(".").at(-1)
+    );
+  }
+
+  return Array
+    .from(candidates)
+    .filter(Boolean);
+}
+
+/**
+ * Résout l'UUID d'une entrée de Document de monde.
  *
  * @param {object} application
  * @param {HTMLElement} target
@@ -96,57 +223,48 @@ function getTargetIdentifiers(target) {
 async function resolveUuidFromContext(application, target) {
   const { id, uuid } = getTargetIdentifiers(target);
 
-  /*
-   * Certains éléments HTML peuvent déjà contenir leur UUID complet.
-   */
   if (uuid) return uuid;
-
   if (!id) return null;
 
   const collection = application?.collection ?? null;
 
-  /*
-   * 1. Recherche dans les Documents déjà chargés.
-   */
-  const cachedDocument = collection?.get?.(id) ?? null;
+  const cachedDocument =
+    collection?.get?.(id) ??
+    null;
 
   if (isUsableUuid(cachedDocument?.uuid)) {
     return cachedDocument.uuid;
   }
 
-  /*
-   * 2. Certains index de compendium peuvent déjà exposer un UUID.
-   */
-  const indexedEntry = collection?.index?.get?.(id) ?? null;
+  const indexedEntry =
+    collection?.index?.get?.(id) ??
+    null;
 
   if (isUsableUuid(indexedEntry?.uuid)) {
     return indexedEntry.uuid;
   }
 
-  /*
-   * 3. Charge proprement une entrée de compendium si elle n'est
-   * pas encore présente dans le cache.
-   */
   if (typeof collection?.getDocument === "function") {
-    const loadedDocument = await collection.getDocument(id);
+    const loadedDocument =
+      await collection.getDocument(id);
 
     if (isUsableUuid(loadedDocument?.uuid)) {
       return loadedDocument.uuid;
     }
   }
 
-  /*
-   * 4. Repli pour une collection de monde standard.
-   */
   const documentName =
     application?.documentName ??
     application?.documentClass?.documentName;
 
-  const worldCollection = documentName
-    ? game.collections?.get?.(documentName)
-    : null;
+  const worldCollection =
+    documentName
+      ? game.collections?.get?.(documentName)
+      : null;
 
-  const worldDocument = worldCollection?.get?.(id) ?? null;
+  const worldDocument =
+    worldCollection?.get?.(id) ??
+    null;
 
   if (isUsableUuid(worldDocument?.uuid)) {
     return worldDocument.uuid;
@@ -156,10 +274,202 @@ async function resolveUuidFromContext(application, target) {
 }
 
 /**
- * Copie du texte dans le presse-papier.
+ * Résout l'UUID d'un Document intégré à la scène active :
+ * - mur ;
+ * - lumière ;
+ * - région.
  *
- * Utilise d'abord l'API Clipboard moderne du navigateur.
- * Un ancien mécanisme navigateur sert uniquement de repli.
+ * @param {string} documentName
+ * @param {HTMLElement} target
+ * @returns {string|null}
+ */
+function resolvePlaceableUuid(documentName, target) {
+  const { id, uuid } = getTargetIdentifiers(target);
+
+  if (uuid) return uuid;
+  if (!id) return null;
+
+  const scene = canvas?.scene;
+
+  if (!scene) {
+    warn(
+      `Aucune scène active pour résoudre un document ${documentName}.`
+    );
+
+    return null;
+  }
+
+  const candidateIds =
+    getCandidateIds(id, documentName);
+
+  for (const candidateId of candidateIds) {
+    const document =
+      scene.getEmbeddedDocument?.(
+        documentName,
+        candidateId
+      );
+
+    if (isUsableUuid(document?.uuid)) {
+      return document.uuid;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Résout l'UUID d'une piste individuelle de Playlist.
+ *
+ * @param {object} application
+ * @param {HTMLElement} target
+ * @returns {string|null}
+ */
+function resolvePlaylistSoundUuid(application, target) {
+  const { id, uuid } = getTargetIdentifiers(target);
+
+  if (uuid) return uuid;
+  if (!id) return null;
+
+  const playlistId =
+    findDatasetValue(
+      target,
+      ["playlistId"]
+    );
+
+  const playlists =
+    application?.collection ??
+    game.playlists;
+
+  /*
+   * Recherche prioritaire dans la playlist parente.
+   */
+  if (playlistId) {
+    const playlist =
+      playlists?.get?.(playlistId) ??
+      game.playlists?.get?.(playlistId);
+
+    const candidateIds =
+      getCandidateIds(
+        id,
+        "PlaylistSound"
+      );
+
+    for (const candidateId of candidateIds) {
+      const sound =
+        playlist?.sounds?.get?.(candidateId);
+
+      if (isUsableUuid(sound?.uuid)) {
+        return sound.uuid;
+      }
+    }
+  }
+
+  /*
+   * Repli : recherche de la piste dans toutes les playlists.
+   */
+  const matches = [];
+
+  for (const playlist of game.playlists ?? []) {
+    const candidateIds =
+      getCandidateIds(
+        id,
+        "PlaylistSound"
+      );
+
+    for (const candidateId of candidateIds) {
+      const sound =
+        playlist?.sounds?.get?.(candidateId);
+
+      if (isUsableUuid(sound?.uuid)) {
+        matches.push(sound);
+        break;
+      }
+    }
+  }
+
+  if (matches.length === 1) {
+    return matches[0].uuid;
+  }
+
+  if (matches.length > 1) {
+    warn(
+      `Plusieurs PlaylistSound correspondent à l'identifiant ${id}. ` +
+      "La copie est annulée pour éviter de copier le mauvais UUID."
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Résout l'UUID d'une page interne de JournalEntry.
+ *
+ * @param {object} application
+ * @param {HTMLElement} target
+ * @returns {string|null}
+ */
+function resolveJournalEntryPageUuid(application, target) {
+  const { id, uuid } = getJournalPageIdentifiers(target);
+
+  if (uuid) return uuid;
+  if (!id) return null;
+
+  /*
+   * ApplicationV2 utilise normalement entry.
+   * document et object servent uniquement de replis.
+   */
+  const journalEntry =
+    application?.entry ??
+    application?.document ??
+    application?.object ??
+    null;
+
+  if (!journalEntry) {
+    warn(
+      "Impossible de retrouver le JournalEntry parent de la page."
+    );
+
+    return null;
+  }
+
+  const candidateIds =
+    getCandidateIds(
+      id,
+      "JournalEntryPage"
+    );
+
+  for (const candidateId of candidateIds) {
+    /*
+     * Recherche dans la collection intégrée de pages.
+     */
+    const pageFromCollection =
+      journalEntry.pages?.get?.(
+        candidateId
+      );
+
+    if (isUsableUuid(pageFromCollection?.uuid)) {
+      return pageFromCollection.uuid;
+    }
+
+    /*
+     * Repli via l'API générique des Documents intégrés.
+     */
+    const embeddedPage =
+      journalEntry.getEmbeddedDocument?.(
+        "JournalEntryPage",
+        candidateId
+      );
+
+    if (isUsableUuid(embeddedPage?.uuid)) {
+      return embeddedPage.uuid;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Copie du texte dans le presse-papier.
  *
  * @param {string} text
  * @returns {Promise<void>}
@@ -171,13 +481,15 @@ async function writeToClipboard(text) {
       return;
     } catch (error) {
       warn(
-        "L'API Clipboard moderne a échoué ; tentative avec le repli navigateur.",
+        "L'API Clipboard moderne a échoué ; " +
+        "tentative avec le repli navigateur.",
         error
       );
     }
   }
 
-  const textarea = document.createElement("textarea");
+  const textarea =
+    document.createElement("textarea");
 
   textarea.value = text;
   textarea.setAttribute("readonly", "");
@@ -187,11 +499,11 @@ async function writeToClipboard(text) {
   textarea.style.top = "-10000px";
 
   document.body.appendChild(textarea);
-
   textarea.select();
 
   try {
-    const copied = document.execCommand("copy");
+    const copied =
+      document.execCommand("copy");
 
     if (!copied) {
       throw new Error(
@@ -204,14 +516,16 @@ async function writeToClipboard(text) {
 }
 
 /**
- * Copie un UUID et affiche les retours utilisateur demandés.
+ * Copie un UUID et affiche les retours utilisateur.
  *
  * @param {string|null|undefined} uuid
  * @returns {Promise<boolean>}
  */
 async function copyUuid(uuid) {
   if (!isUsableUuid(uuid)) {
-    warn("Aucun UUID exploitable n'a été trouvé.");
+    warn(
+      "Aucun UUID exploitable n'a été trouvé."
+    );
 
     ui.notifications?.warn(
       "Impossible de copier l’UUID : UUID introuvable."
@@ -223,7 +537,9 @@ async function copyUuid(uuid) {
   try {
     await writeToClipboard(uuid);
 
-    ui.notifications?.info(`UUID copié : ${uuid}`);
+    ui.notifications?.info(
+      `UUID copié : ${uuid}`
+    );
 
     console.info(
       `${LOG_PREFIX} UUID copié : ${uuid}`
@@ -245,26 +561,27 @@ async function copyUuid(uuid) {
 }
 
 /**
- * Gestionnaire du clic sur l'option du menu contextuel.
+ * Gestionnaire du clic sur un Document de monde.
  *
  * @param {object} application
  * @param {HTMLElement} target
  */
 async function onContextCopy(application, target) {
   try {
-    const uuid = await resolveUuidFromContext(
-      application,
-      target
-    );
+    const uuid =
+      await resolveUuidFromContext(
+        application,
+        target
+      );
 
     await copyUuid(uuid);
   } catch (error) {
     warn(
-      "Erreur pendant la résolution de l'UUID depuis le menu contextuel.",
+      "Erreur pendant la résolution de l'UUID " +
+      "depuis le menu contextuel.",
       error
     );
 
-    
     ui.notifications?.error(
       "Impossible de récupérer l’UUID. Consultez la console (F12)."
     );
@@ -272,81 +589,399 @@ async function onContextCopy(application, target) {
 }
 
 /**
- * Ajoute l'option « Copier UUID » à un menu contextuel
- * de Document.
+ * Gestionnaire du clic sur un objet intégré à la scène.
+ *
+ * @param {string} documentName
+ * @param {HTMLElement} target
+ */
+async function onPlaceableContextCopy(
+  documentName,
+  target
+) {
+  try {
+    const uuid =
+      resolvePlaceableUuid(
+        documentName,
+        target
+      );
+
+    await copyUuid(uuid);
+  } catch (error) {
+    warn(
+      `Erreur pendant la résolution de l'UUID ` +
+      `du document ${documentName}.`,
+      error
+    );
+
+    ui.notifications?.error(
+      "Impossible de récupérer l’UUID. Consultez la console (F12)."
+    );
+  }
+}
+
+/**
+ * Gestionnaire du clic sur une piste de Playlist.
+ *
+ * @param {object} application
+ * @param {HTMLElement} target
+ */
+async function onPlaylistSoundContextCopy(
+  application,
+  target
+) {
+  try {
+    const uuid =
+      resolvePlaylistSoundUuid(
+        application,
+        target
+      );
+
+    await copyUuid(uuid);
+  } catch (error) {
+    warn(
+      "Erreur pendant la résolution de l'UUID " +
+      "de la piste de Playlist.",
+      error
+    );
+
+    ui.notifications?.error(
+      "Impossible de récupérer l’UUID. Consultez la console (F12)."
+    );
+  }
+}
+
+/**
+ * Gestionnaire du clic sur une page de journal.
+ *
+ * @param {object} application
+ * @param {HTMLElement} target
+ */
+async function onJournalEntryPageContextCopy(
+  application,
+  target
+) {
+  try {
+    const uuid =
+      resolveJournalEntryPageUuid(
+        application,
+        target
+      );
+
+    await copyUuid(uuid);
+  } catch (error) {
+    warn(
+      "Erreur pendant la résolution de l'UUID " +
+      "de la page de journal.",
+      error
+    );
+
+    ui.notifications?.error(
+      "Impossible de récupérer l’UUID. Consultez la console (F12)."
+    );
+  }
+}
+
+/**
+ * Vérifie qu'une option n'a pas déjà été ajoutée au menu.
+ *
+ * @param {Array<object>} menuItems
+ * @param {string} cssClass
+ * @returns {boolean}
+ */
+function hasContextMenuOption(
+  menuItems,
+  cssClass
+) {
+  return menuItems.some((item) =>
+    String(item?.classes ?? "")
+      .split(/\s+/)
+      .includes(cssClass)
+  );
+}
+
+/**
+ * Ajoute l'option « Copier UUID » au menu d'un Document de monde.
  *
  * @param {object} application
  * @param {Array<object>} menuItems
  */
-function addContextMenuOption(application, menuItems) {
+function addContextMenuOption(
+  application,
+  menuItems
+) {
   if (!Array.isArray(menuItems)) {
     warn(
-      "Le hook de menu contextuel n'a pas fourni un tableau valide."
+      "Le hook de menu contextuel " +
+      "n'a pas fourni un tableau valide."
     );
 
     return;
   }
 
-  /*
-   * Empêche l'apparition d'une option en double.
-   */
-  const alreadyAdded = menuItems.some((item) =>
-    String(item?.classes ?? "")
-      .split(/\s+/)
-      .includes(CONTEXT_MENU_CLASS)
-  );
-
-  if (alreadyAdded) return;
+  if (
+    hasContextMenuOption(
+      menuItems,
+      CONTEXT_MENU_CLASS
+    )
+  ) {
+    return;
+  }
 
   menuItems.push({
     label: "Copier UUID",
     icon: "fa-solid fa-copy",
     classes: CONTEXT_MENU_CLASS,
 
-    /*
-     * Masque l'option si l'élément ciblé ne fournit
-     * aucun identifiant utilisable.
-     */
     visible: (target) => {
-      const { id, uuid } = getTargetIdentifiers(target);
+      const { id, uuid } =
+        getTargetIdentifiers(target);
+
       return Boolean(id || uuid);
     },
 
-    onClick: (target) => {
-      void onContextCopy(application, target);
+    onClick: (_event, target) => {
+      void onContextCopy(
+        application,
+        target
+      );
     }
   });
 }
 
-/*
- * Enregistrement des hooks de menu contextuel.
+/**
+ * Ajoute l'option à un type précis d'objet de scène.
+ *
+ * @param {string} documentName
+ * @param {object} _application
+ * @param {Array<object>} menuItems
+ */
+function addPlaceableContextMenuOption(
+  documentName,
+  _application,
+  menuItems
+) {
+  if (!Array.isArray(menuItems)) {
+    warn(
+      `Le hook ${documentName}Placeable ` +
+      "n'a pas fourni un tableau valide."
+    );
+
+    return;
+  }
+
+  const cssClass =
+    `${CONTEXT_MENU_CLASS}-` +
+    documentName.toLowerCase();
+
+  if (
+    hasContextMenuOption(
+      menuItems,
+      cssClass
+    )
+  ) {
+    return;
+  }
+
+  menuItems.push({
+    label: "Copier UUID",
+    icon: "fa-solid fa-copy",
+    classes: cssClass,
+
+    visible: (target) => {
+      const { id, uuid } =
+        getTargetIdentifiers(target);
+
+      return Boolean(id || uuid);
+    },
+
+    onClick: (_event, target) => {
+      void onPlaceableContextCopy(
+        documentName,
+        target
+      );
+    }
+  });
+}
+
+/**
+ * Ajoute l'option à une piste individuelle de Playlist.
+ *
+ * @param {object} application
+ * @param {Array<object>} menuItems
+ */
+function addPlaylistSoundContextMenuOption(
+  application,
+  menuItems
+) {
+  if (!Array.isArray(menuItems)) {
+    warn(
+      "Le hook PlaylistSound " +
+      "n'a pas fourni un tableau valide."
+    );
+
+    return;
+  }
+
+  const cssClass =
+    `${CONTEXT_MENU_CLASS}-playlist-sound`;
+
+  if (
+    hasContextMenuOption(
+      menuItems,
+      cssClass
+    )
+  ) {
+    return;
+  }
+
+  menuItems.push({
+    label: "Copier UUID",
+    icon: "fa-solid fa-copy",
+    classes: cssClass,
+
+    visible: (target) => {
+      const { id, uuid } =
+        getTargetIdentifiers(target);
+
+      return Boolean(id || uuid);
+    },
+
+    onClick: (_event, target) => {
+      void onPlaylistSoundContextCopy(
+        application,
+        target
+      );
+    }
+  });
+}
+
+/**
+ * Ajoute l'option à une page interne de JournalEntry.
+ *
+ * @param {object} application
+ * @param {Array<object>} menuItems
+ */
+function addJournalEntryPageContextMenuOption(
+  application,
+  menuItems
+) {
+  if (!Array.isArray(menuItems)) {
+    warn(
+      "Le hook JournalEntryPage " +
+      "n'a pas fourni un tableau valide."
+    );
+
+    return;
+  }
+
+  const cssClass =
+    `${CONTEXT_MENU_CLASS}-journal-page`;
+
+  if (
+    hasContextMenuOption(
+      menuItems,
+      cssClass
+    )
+  ) {
+    return;
+  }
+
+  menuItems.push({
+    label: "Copier UUID",
+    icon: "fa-solid fa-copy",
+    classes: cssClass,
+
+    visible: (target) => {
+      const { id, uuid } =
+        getJournalPageIdentifiers(target);
+
+      return Boolean(id || uuid);
+    },
+
+    onClick: (_event, target) => {
+      void onJournalEntryPageContextCopy(
+        application,
+        target
+      );
+    }
+  });
+}
+
+/**
+ * Enregistrement des hooks.
  */
 Hooks.once("init", () => {
-  for (const documentName of SUPPORTED_DOCUMENT_NAMES) {
+  /*
+   * Documents des sidebars.
+   */
+  for (
+    const documentName
+    of SUPPORTED_DOCUMENT_NAMES
+  ) {
     Hooks.on(
       `get${documentName}ContextOptions`,
       addContextMenuOption
     );
   }
 
-  console.info(`${LOG_PREFIX} Initialisé.`);
+  /*
+   * Objets intégrés aux scènes.
+   */
+  for (
+    const documentName
+    of SUPPORTED_PLACEABLE_DOCUMENT_NAMES
+  ) {
+    Hooks.on(
+      `get${documentName}PlaceableContextOptions`,
+      (application, menuItems) => {
+        addPlaceableContextMenuOption(
+          documentName,
+          application,
+          menuItems
+        );
+      }
+    );
+  }
+
+  /*
+   * Pistes individuelles des playlists.
+   */
+  Hooks.on(
+    "getPlaylistSoundContextOptions",
+    addPlaylistSoundContextMenuOption
+  );
+
+  /*
+   * Pages internes des journaux ouverts.
+   */
+  Hooks.on(
+    "getJournalEntryPageContextOptions",
+    addJournalEntryPageContextMenuOption
+  );
+
+  console.info(
+    `${LOG_PREFIX} Initialisé.`
+  );
 });
 
-/*
- * Expose une petite API publique.
- *
- * Elle n'est pas nécessaire au fonctionnement normal du module,
- * mais elle sera utile pour les tests et pour la future V2.
+/**
+ * Exposition d'une petite API publique.
  */
 Hooks.once("ready", () => {
-  const module = game.modules.get(MODULE_ID);
+  const moduleData =
+    game.modules.get(MODULE_ID);
 
-  if (module) {
-    module.api = Object.freeze({
+  if (moduleData) {
+    moduleData.api = Object.freeze({
       copyUuid,
-      resolveUuidFromContext
+      resolveUuidFromContext,
+      resolvePlaceableUuid,
+      resolvePlaylistSoundUuid,
+      resolveJournalEntryPageUuid
     });
   }
 
-  console.info(`${LOG_PREFIX} Prêt.`);
+  console.info(
+    `${LOG_PREFIX} Prêt.`
+  );
 });

@@ -1,14 +1,25 @@
 {
   "id": "uuid-copier",
-  "title": "Evil UUID Copier",
-  "description": "Ajoute une action Copier UUID aux menus contextuels des documents Foundry VTT.",
+  "title": "Evilbram UIID-Copier",
+  "description": "Ajoute une option Copier UUID aux menus contextuels de nombreux documents et objets Foundry VTT.",
   "version": "1.0.0",
   "compatibility": {
     "minimum": "14",
     "verified": "14",
     "maximum": "14"
   },
+  "authors": [ 
+    {
+      "name": "Evilbram",
+      "flags": {}
+    }
+  ],
   "esmodules": [
     "scripts/main.js"
-  ]
+  ],
+  "url": "https://github.com/ctotone/uuid-copier",
+  "manifest": "https://raw.githubusercontent.com/ctotone/uuid-copier/refs/heads/main/module.json",
+  "download": "https://github.com/ctotone/uuid-copier/releases/latest/download/uuid-copier.zip",
+  "readme": "README.md",
+  "bugs": "https://github.com/ctotone/uuid-copier/issues"
 }
