@@ -264,6 +264,7 @@ async function onContextCopy(application, target) {
       error
     );
 
+    
     ui.notifications?.error(
       "Impossible de récupérer l’UUID. Consultez la console (F12)."
     );

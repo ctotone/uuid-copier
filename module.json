@@ -1,6 +1,6 @@
 {
   "id": "uuid-copier",
-  "title": "Evilbram UUID Copier",
+  "title": "Evil UUID Copier",
   "description": "Ajoute une action Copier UUID aux menus contextuels des documents Foundry VTT.",
   "version": "1.0.0",
   "compatibility": {
