@@ -1,0 +1,14 @@
+{
+  "id": "uuid-copier",
+  "title": "Evilbram UUID Copier",
+  "description": "Ajoute une action Copier UUID aux menus contextuels des documents Foundry VTT.",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "14",
+    "verified": "14",
+    "maximum": "14"
+  },
+  "esmodules": [
+    "scripts/main.js"
+  ]
+}
