@@ -1,140 +1,80 @@
 # Evilbram UIID-Copier
 
-**Evilbram UIID-Copier** est un module pour **Foundry Virtual Tabletop v14** permettant de copier rapidement l’UUID de nombreux éléments Foundry grâce à une option **Copier UUID** ajoutée à leurs menus contextuels.
+Un module pour **Foundry VTT v14** qui ajoute une option **Copier UUID** dans les menus accessibles au clic droit.
 
-Le module ne modifie pas le core de Foundry. Il utilise uniquement les Hooks et API prévus par Foundry VTT.
+L’UUID sélectionné est immédiatement copié dans le presse-papier, avec une notification de confirmation dans Foundry.
 
-## Fonctionnalités
+## Éléments compatibles
 
-Le module permet actuellement de copier l’UUID des éléments suivants :
-
-### Documents des panneaux latéraux
-
-- Scènes
 - Acteurs
 - Objets
+- Scènes
 - Journaux
+- Pages de journal
 - Tables aléatoires
 - Macros
 - Playlists
-- Paquets de cartes, lorsque le type est disponible
-
-### Éléments intégrés
-
+- Musiques individuelles
 - Murs
-- Lumières ambiantes
+- Lumières
 - Régions
-- Musiques individuelles contenues dans une playlist
-- Pages internes d’un journal
+- Paquets de cartes
 
-Après la copie, Foundry affiche une notification sous cette forme :
+## Installation
 
-```text
-UUID copié : Scene.xxxxxxxxxxxxxxxx
-```
+Dans Foundry VTT :
 
-## Installation automatique
-
-Dans l’écran de configuration de Foundry VTT :
-
-1. Ouvrez l’onglet **Modules complémentaires**.
+1. Ouvrez **Modules complémentaires**.
 2. Cliquez sur **Installer un module**.
-3. Collez l’adresse suivante dans le champ **URL du manifeste** :
+3. Collez cette adresse dans le champ **URL du manifeste** :
 
 ```text
 https://raw.githubusercontent.com/ctotone/uuid-copier/refs/heads/main/module.json
 ```
 
-4. Cliquez sur **Installer**.
-5. Lancez votre monde et activez **Evilbram UIID-Copier** dans la gestion des modules.
-
-## Installation manuelle
-
-1. Téléchargez `uuid-copier.zip` depuis la dernière release GitHub.
-2. Extrayez son contenu dans le dossier :
-
-```text
-Data/modules/uuid-copier/
-```
-
-3. Vérifiez que l’arborescence obtenue est :
-
-```text
-uuid-copier/
-├─ module.json
-├─ README.md
-└─ scripts/
-   └─ main.js
-```
-
-4. Redémarrez Foundry VTT.
-5. Activez le module dans votre monde.
+4. Installez le module, puis activez-le dans votre monde.
 
 ## Utilisation
 
-Faites un clic droit sur un élément compatible, puis sélectionnez :
+Faites un clic droit sur un élément compatible, puis choisissez :
 
 ```text
 Copier UUID
 ```
 
-L’UUID est immédiatement copié dans le presse-papier.
-
-Exemples :
+Exemples d’UUID copiés :
 
 ```text
 Actor.xxxxxxxxxxxxxxxx
 Scene.xxxxxxxxxxxxxxxx
 Scene.xxxxxxxxxxxxxxxx.Wall.xxxxxxxxxxxxxxxx
-Scene.xxxxxxxxxxxxxxxx.AmbientLight.xxxxxxxxxxxxxxxx
-Scene.xxxxxxxxxxxxxxxx.Region.xxxxxxxxxxxxxxxx
 Playlist.xxxxxxxxxxxxxxxx.PlaylistSound.xxxxxxxxxxxxxxxx
 JournalEntry.xxxxxxxxxxxxxxxx.JournalEntryPage.xxxxxxxxxxxxxxxx
 ```
 
 ## Compatibilité
 
-- Version minimale : Foundry VTT 14
-- Version vérifiée : Foundry VTT 14
-- Système de jeu : indépendant du système, dans la mesure où celui-ci conserve les menus et Documents standards de Foundry
+- **Foundry VTT :** version 14
+- **Systèmes de jeu :** module indépendant du système
+- Testé notamment avec **Call of Cthulhu 7e édition**
 
-Le module a notamment été testé dans un monde utilisant le système Call of Cthulhu 7e édition.
+## Non pris en charge actuellement
 
-## Limites actuelles
+- Tokens
+- Sons ambiants de scène
+- Tuiles
+- Dessins
+- Notes de scène
+- Packs et entrées de compendium
+- Raccourcis clavier
 
-Le module ne prend pas encore en charge :
+## Liens
 
-- les tokens ;
-- les sons ambiants placés sur une scène ;
-- les tuiles ;
-- les dessins ;
-- les notes de scène ;
-- les raccourcis clavier ;
-- les UUID des packs de compendium eux-mêmes.
+- [Dépôt GitHub](https://github.com/ctotone/uuid-copier)
+- [Signaler un problème](https://github.com/ctotone/uuid-copier/issues)
 
-La copie des entrées de compendium n’est pas un objectif prioritaire du module.
+## Licence
 
-## Dépannage
+Distribué sous licence MIT.
 
-Si la copie échoue :
-
-1. Ouvrez la console avec `F12`.
-2. Recherchez les messages commençant par :
-
-```text
-[Evilbram UIID-Copier]
-```
-
-Le module affiche un warning propre lorsqu’aucun UUID exploitable ne peut être récupéré.
-
-## Dépôt
-
-Le code source et les releases sont disponibles sur GitHub :
-
-```text
-https://github.com/ctotone/uuid-copier
-```
-
-## Version
-
-Version actuelle : **1.0.0**
+**Version actuelle : 1.0.0**
