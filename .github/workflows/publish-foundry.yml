@@ -1,1 +1,131 @@
+name: Publier sur Foundry VTT
 
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Tester la publication sans la valider"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publier la version du module
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Lire le manifeste
+        id: module
+        shell: bash
+        run: |
+          echo "id=$(jq -r '.id' module.json)" >> "$GITHUB_OUTPUT"
+          echo "version=$(jq -r '.version' module.json)" >> "$GITHUB_OUTPUT"
+          echo "minimum=$(jq -r '.compatibility.minimum' module.json)" >> "$GITHUB_OUTPUT"
+          echo "verified=$(jq -r '.compatibility.verified' module.json)" >> "$GITHUB_OUTPUT"
+          echo "maximum=$(jq -r '.compatibility.maximum // empty' module.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Vérifier les fichiers de la release
+        shell: bash
+        env:
+          VERSION: ${{ steps.module.outputs.version }}
+        run: |
+          MANIFEST_URL="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${VERSION}/module.json"
+
+          echo "Vérification du manifeste : $MANIFEST_URL"
+          curl --fail --silent --show-error --location \
+            --output release-module.json \
+            "$MANIFEST_URL"
+
+          DOWNLOAD_URL=$(jq -r '.download' release-module.json)
+
+          if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" = "null" ]; then
+            echo "Erreur : aucune URL download dans le manifeste."
+            exit 1
+          fi
+
+          echo "Vérification du ZIP : $DOWNLOAD_URL"
+          curl --fail --silent --show-error --location \
+            --output /dev/null \
+            "$DOWNLOAD_URL"
+
+          echo "MANIFEST_URL=$MANIFEST_URL" >> "$GITHUB_ENV"
+          echo "NOTES_URL=https://github.com/${GITHUB_REPOSITORY}/releases/tag/${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Envoyer la version à Foundry VTT
+        shell: bash
+        env:
+          FOUNDRY_RELEASE_TOKEN: ${{ secrets.FOUNDRY_RELEASE_TOKEN }}
+          PACKAGE_ID: ${{ steps.module.outputs.id }}
+          VERSION: ${{ steps.module.outputs.version }}
+          MINIMUM: ${{ steps.module.outputs.minimum }}
+          VERIFIED: ${{ steps.module.outputs.verified }}
+          MAXIMUM: ${{ steps.module.outputs.maximum }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ -z "$FOUNDRY_RELEASE_TOKEN" ]; then
+            echo "Erreur : le secret FOUNDRY_RELEASE_TOKEN est absent."
+            exit 1
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg id "$PACKAGE_ID" \
+            --arg version "$VERSION" \
+            --arg manifest "$MANIFEST_URL" \
+            --arg notes "$NOTES_URL" \
+            --arg minimum "$MINIMUM" \
+            --arg verified "$VERIFIED" \
+            --arg maximum "$MAXIMUM" \
+            '{
+              id: $id,
+              release: {
+                version: $version,
+                manifest: $manifest,
+                notes: $notes,
+                compatibility: (
+                  {
+                    minimum: $minimum,
+                    verified: $verified
+                  }
+                  +
+                  (
+                    if $maximum == ""
+                    then {}
+                    else {maximum: $maximum}
+                    end
+                  )
+                )
+              }
+            }'
+          )
+
+          if [ "$DRY_RUN" = "true" ]; then
+            PAYLOAD=$(echo "$PAYLOAD" | jq '. + {"dry-run": true}')
+          fi
+
+          RESPONSE_FILE=$(mktemp)
+
+          HTTP_CODE=$(curl \
+            --silent \
+            --show-error \
+            --output "$RESPONSE_FILE" \
+            --write-out "%{http_code}" \
+            --request POST \
+            --header "Content-Type: application/json" \
+            --header "Authorization: $FOUNDRY_RELEASE_TOKEN" \
+            --data "$PAYLOAD" \
+            "https://foundryvtt.com/_api/packages/release_version/")
+
+          echo "Réponse Foundry :"
+          jq . "$RESPONSE_FILE" 2>/dev/null || cat "$RESPONSE_FILE"
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "La requête Foundry a échoué avec le code HTTP $HTTP_CODE."
+            exit 1
+          fi
