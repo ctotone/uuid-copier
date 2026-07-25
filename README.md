@@ -15,10 +15,15 @@ L’UUID sélectionné est immédiatement copié dans le presse-papier, avec une
 - Macros
 - Playlists
 - Musiques individuelles
+- Paquets de cartes
 - Murs
 - Lumières
 - Régions
-- Paquets de cartes
+- Tokens
+- Sons ambiants de scène
+- Tuiles
+- Dessins
+- Notes de scène
 
 ## Installation
 
@@ -47,7 +52,11 @@ Exemples d’UUID copiés :
 ```text
 Actor.xxxxxxxxxxxxxxxx
 Scene.xxxxxxxxxxxxxxxx
-Scene.xxxxxxxxxxxxxxxx.Wall.xxxxxxxxxxxxxxxx
+Scene.xxxxxxxxxxxxxxxx.Token.xxxxxxxxxxxxxxxx
+Scene.xxxxxxxxxxxxxxxx.AmbientSound.xxxxxxxxxxxxxxxx
+Scene.xxxxxxxxxxxxxxxx.Tile.xxxxxxxxxxxxxxxx
+Scene.xxxxxxxxxxxxxxxx.Drawing.xxxxxxxxxxxxxxxx
+Scene.xxxxxxxxxxxxxxxx.Note.xxxxxxxxxxxxxxxx
 Playlist.xxxxxxxxxxxxxxxx.PlaylistSound.xxxxxxxxxxxxxxxx
 JournalEntry.xxxxxxxxxxxxxxxx.JournalEntryPage.xxxxxxxxxxxxxxxx
 ```
@@ -58,23 +67,14 @@ JournalEntry.xxxxxxxxxxxxxxxx.JournalEntryPage.xxxxxxxxxxxxxxxx
 - **Systèmes de jeu :** module indépendant du système
 - Testé notamment avec **Call of Cthulhu 7e édition**
 
-## Non pris en charge actuellement
-
-- Tokens
-- Sons ambiants de scène
-- Tuiles
-- Dessins
-- Notes de scène
-- Packs et entrées de compendium
-- Raccourcis clavier
-
 ## Liens
 
 - [Dépôt GitHub](https://github.com/ctotone/uuid-copier)
 - [Signaler un problème](https://github.com/ctotone/uuid-copier/issues)
+- [Historique des versions](CHANGELOG.md)
 
 ## Licence
 
 Distribué sous licence MIT.
 
-**Version actuelle : 1.0.0**
+**Version de développement actuelle : 1.1.0**
