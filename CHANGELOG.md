@@ -2,7 +2,7 @@
 
 Toutes les évolutions importantes de **Evilbram UIID-Copier** sont répertoriées dans ce fichier.
 
-## [1.1.0] - En cours de développement
+## [1.1.0] - 2026-07-25
 
 ### Ajouté
 
