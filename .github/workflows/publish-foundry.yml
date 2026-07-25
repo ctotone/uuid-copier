@@ -36,7 +36,7 @@ jobs:
         env:
           VERSION: ${{ steps.module.outputs.version }}
         run: |
-          MANIFEST_URL="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${VERSION}/module.json"
+          MANIFEST_URL="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/tags/${VERSION}/module.json"
 
           echo "Vérification du manifeste : $MANIFEST_URL"
           curl --fail --silent --show-error --location \
