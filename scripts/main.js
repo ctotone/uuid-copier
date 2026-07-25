@@ -23,7 +23,12 @@ const SUPPORTED_DOCUMENT_NAMES = Object.freeze([
 const SUPPORTED_PLACEABLE_DOCUMENT_NAMES = Object.freeze([
   "Wall",
   "AmbientLight",
-  "Region"
+  "Region",
+  "Token",
+  "AmbientSound",
+  "Tile",
+  "Drawing",
+  "Note"
 ]);
 
 /**
@@ -274,10 +279,17 @@ async function resolveUuidFromContext(application, target) {
 }
 
 /**
- * Résout l'UUID d'un Document intégré à la scène active :
+ * Résout l'UUID d'un Document intégré à la scène active.
+ *
+ * Types actuellement pris en charge :
  * - mur ;
  * - lumière ;
- * - région.
+ * - région ;
+ * - token ;
+ * - son ambiant ;
+ * - tuile ;
+ * - dessin ;
+ * - note.
  *
  * @param {string} documentName
  * @param {HTMLElement} target
@@ -340,9 +352,6 @@ function resolvePlaylistSoundUuid(application, target) {
     application?.collection ??
     game.playlists;
 
-  /*
-   * Recherche prioritaire dans la playlist parente.
-   */
   if (playlistId) {
     const playlist =
       playlists?.get?.(playlistId) ??
@@ -364,9 +373,6 @@ function resolvePlaylistSoundUuid(application, target) {
     }
   }
 
-  /*
-   * Repli : recherche de la piste dans toutes les playlists.
-   */
   const matches = [];
 
   for (const playlist of game.playlists ?? []) {
@@ -414,10 +420,6 @@ function resolveJournalEntryPageUuid(application, target) {
   if (uuid) return uuid;
   if (!id) return null;
 
-  /*
-   * ApplicationV2 utilise normalement entry.
-   * document et object servent uniquement de replis.
-   */
   const journalEntry =
     application?.entry ??
     application?.document ??
@@ -439,9 +441,6 @@ function resolveJournalEntryPageUuid(application, target) {
     );
 
   for (const candidateId of candidateIds) {
-    /*
-     * Recherche dans la collection intégrée de pages.
-     */
     const pageFromCollection =
       journalEntry.pages?.get?.(
         candidateId
@@ -451,9 +450,6 @@ function resolveJournalEntryPageUuid(application, target) {
       return pageFromCollection.uuid;
     }
 
-    /*
-     * Repli via l'API générique des Documents intégrés.
-     */
     const embeddedPage =
       journalEntry.getEmbeddedDocument?.(
         "JournalEntryPage",
@@ -911,9 +907,6 @@ function addJournalEntryPageContextMenuOption(
  * Enregistrement des hooks.
  */
 Hooks.once("init", () => {
-  /*
-   * Documents des sidebars.
-   */
   for (
     const documentName
     of SUPPORTED_DOCUMENT_NAMES
@@ -924,9 +917,6 @@ Hooks.once("init", () => {
     );
   }
 
-  /*
-   * Objets intégrés aux scènes.
-   */
   for (
     const documentName
     of SUPPORTED_PLACEABLE_DOCUMENT_NAMES
@@ -943,17 +933,11 @@ Hooks.once("init", () => {
     );
   }
 
-  /*
-   * Pistes individuelles des playlists.
-   */
   Hooks.on(
     "getPlaylistSoundContextOptions",
     addPlaylistSoundContextMenuOption
   );
 
-  /*
-   * Pages internes des journaux ouverts.
-   */
   Hooks.on(
     "getJournalEntryPageContextOptions",
     addJournalEntryPageContextMenuOption
